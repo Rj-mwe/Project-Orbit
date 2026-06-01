@@ -19,10 +19,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut commands: Commands,
 ) {
-    // 1. Spawn the modern 2D camera component
     commands.spawn(Camera2d::default());
-
-    // 2. Spawn the player using modern required components instead of a bundle
     commands.spawn((
         Player, 
         Mesh2d(meshes.add(Circle { radius: 50.0 })),
@@ -44,6 +41,9 @@ fn move_player(
     let top_boundary = half_height - PLAYER_RADIUS;
     let bottom_boundary = -half_height + PLAYER_RADIUS;
 
+    let half_width = window.width() / 2.0;
+    let wrap_threshold = half_width + PLAYER_RADIUS;
+
     for mut transform in transforms.iter_mut() {
         let mut direction = Vec3::ZERO;
         
@@ -57,5 +57,11 @@ fn move_player(
         }
 
         transform.translation.y = transform.translation.y.clamp(bottom_boundary, top_boundary);
+
+        if transform.translation.x > wrap_threshold {
+            transform.translation.x = -wrap_threshold;
+        } else if transform.translation.x < -wrap_threshold {
+            transform.translation.x = wrap_threshold;
+        }
     }
 }
