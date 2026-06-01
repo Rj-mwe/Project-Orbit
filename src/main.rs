@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 const MOVE_SPEED: f32 = 300.0;
+const PLAYER_RADIUS: f32 = 50.0;
 
 #[derive(Component)] 
 struct Player;
@@ -33,7 +34,16 @@ fn move_player(
     mut transforms: Query<&mut Transform, With<Player>>,
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
+    windows: Query<&Window>,
 ) {
+    let window = match windows.single() {
+        Ok(window) => window,
+        Err(_) => return,
+    };
+    let half_height = window.height() / 2.0;
+    let top_boundary = half_height - PLAYER_RADIUS;
+    let bottom_boundary = -half_height + PLAYER_RADIUS;
+
     for mut transform in transforms.iter_mut() {
         let mut direction = Vec3::ZERO;
         
@@ -45,5 +55,7 @@ fn move_player(
         if direction.length_squared() > 0.0 {
             transform.translation += MOVE_SPEED * direction.normalize() * time.delta_secs();
         }
+
+        transform.translation.y = transform.translation.y.clamp(bottom_boundary, top_boundary);
     }
 }
