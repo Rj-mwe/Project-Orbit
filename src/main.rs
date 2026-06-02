@@ -49,7 +49,8 @@ fn setup(
 }
 
 fn move_player(
-    mut query: Query<(&mut Transform, &mut Dash), With<Player>>,
+    mut query: Query<(&mut Transform, &mut Dash, &MeshMaterial2d<ColorMaterial>), With<Player>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     windows: Query<&Window>,
