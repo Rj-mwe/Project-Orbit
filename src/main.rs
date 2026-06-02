@@ -4,7 +4,7 @@ const MOVE_SPEED: f32 = 300.0;
 const DASH_SPEED: f32 = 1500.0;
 const DASH_DURATION: f32 = 0.15;
 const DASH_COOLDOWN: f32 = 1.0;
-const PLAYER_RADIUS: f32 = 50.0;
+const PLAYER_RADIUS: f32 = 10.0;
 const TRAIL_LIFESPAN: f32 = 0.25;
 
 #[derive(Component)] 
@@ -15,6 +15,7 @@ struct Dash {
     duration_timer: Timer,
     cooldown_timer: Timer,
     direction: Vec3,
+    last_direction: Vec3,
     is_dashing: bool,
 }
 
@@ -47,9 +48,10 @@ fn setup(
                 timer
             },
             direction: Vec3::ZERO,
+            last_direction: Vec3::new(1.0, 0.0, 0.0),
             is_dashing: false,
         },
-        Mesh2d(meshes.add(Circle { radius: 50.0 })),
+        Mesh2d(meshes.add(Circle { radius: PLAYER_RADIUS })),
         MeshMaterial2d(materials.add(Color::from(bevy::color::palettes::css::WHITE))),
     ));
 }
@@ -103,16 +105,18 @@ fn move_player(
             
             if direction.length_squared() > 0.0 {
                 let normalized_dir = direction.normalize();
+                dash.last_direction = normalized_dir;
                 transform.translation += MOVE_SPEED * normalized_dir * time.delta_secs();
-
-                if keys.just_pressed(KeyCode::Space)
-                    && dash.cooldown_timer.elapsed() >= dash.cooldown_timer.duration()
-                {
-                    dash.is_dashing = true;
-                    dash.direction = normalized_dir;
-                    dash.duration_timer.reset();
-                }
             }
+        }
+
+        if (keys.just_pressed(KeyCode::Space) || keys.just_pressed(KeyCode::ShiftLeft))
+            && dash.cooldown_timer.elapsed() >= dash.cooldown_timer.duration()
+            && !dash.is_dashing
+        {
+            dash.is_dashing = true;
+            dash.direction = dash.last_direction;
+            dash.duration_timer.reset();
         }
 
         if let Some(material) = materials.get_mut(material_handle) {
