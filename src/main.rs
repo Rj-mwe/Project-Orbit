@@ -35,12 +35,21 @@ struct Collectible;
 #[derive(Resource)]
 struct SpawnTimer(Timer);
 
+#[derive(Resource)]
+struct Score {
+    collected: u32,
+}
+
+#[derive(Component)]
+struct ScoreText;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .insert_resource(SpawnTimer(Timer::from_seconds(SPAWN_INTERVAL, TimerMode::Repeating)))
+        .insert_resource(Score { collected: 0 })
         .add_systems(Startup, setup)
-        .add_systems(Update, (move_player, fade_trails, spawn_collectibles, collect_items))
+        .add_systems(Update, (move_player, fade_trails, spawn_collectibles, collect_items, update_score_display))
         .run();
 }
 
@@ -65,6 +74,17 @@ fn setup(
         },
         Mesh2d(meshes.add(Circle { radius: PLAYER_RADIUS })),
         MeshMaterial2d(materials.add(Color::from(bevy::color::palettes::css::WHITE))),
+    ));
+
+    commands.spawn((
+        Text2d::new("Collected: 0 | On Map: 0"),
+        TextFont {
+            font_size: 24.0,
+            ..default()
+        },
+        TextColor(Color::srgb(1.0, 1.0, 1.0)),
+        Transform::from_translation(Vec3::new(-400.0, 300.0, 0.0)),
+        ScoreText,
     ));
 }
 
@@ -228,6 +248,7 @@ fn collect_items(
     mut commands: Commands,
     player_query: Query<&Transform, With<Player>>,
     collectible_query: Query<(Entity, &Transform), With<Collectible>>,
+    mut score: ResMut<Score>,
 ) {
     let player_transform = match player_query.single() {
         Ok(transform) => transform,
@@ -238,6 +259,19 @@ fn collect_items(
         let distance = player_transform.translation.distance(collectible_transform.translation);
         if distance < PLAYER_RADIUS + COLLECTIBLE_SIZE / 2.0 {
             commands.entity(entity).despawn();
+            score.collected += 1;
         }
+    }
+}
+
+fn update_score_display(
+    mut score_text_query: Query<&mut Text2d, With<ScoreText>>,
+    score: Res<Score>,
+    collectible_query: Query<&Transform, With<Collectible>>,
+) {
+    let on_map = collectible_query.iter().count();
+
+    if let Ok(mut text) = score_text_query.single_mut() {
+        text.0 = format!("Collected: {} | On Map: {}", score.collected, on_map);
     }
 }
