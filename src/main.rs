@@ -5,6 +5,7 @@ const DASH_SPEED: f32 = 1500.0;
 const DASH_DURATION: f32 = 0.15;
 const DASH_COOLDOWN: f32 = 1.0;
 const PLAYER_RADIUS: f32 = 50.0;
+const TRAIL_LIFESPAN: f32 = 0.25;
 
 #[derive(Component)] 
 struct Player;
@@ -17,11 +18,16 @@ struct Dash {
     is_dashing: bool,
 }
 
+#[derive(Component)]
+struct TrailEffect {
+    timer: Timer,
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, move_player)
+        .add_systems(Update, (move_player, fade_trails))
         .run();
 }
 
@@ -51,6 +57,8 @@ fn setup(
 fn move_player(
     mut query: Query<(&mut Transform, &mut Dash, &MeshMaterial2d<ColorMaterial>), With<Player>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     windows: Query<&Window>,
@@ -66,7 +74,7 @@ fn move_player(
     let half_width = window.width() / 2.0;
     let wrap_threshold = half_width + PLAYER_RADIUS;
 
-    for (mut transform, mut dash) in query.iter_mut() {
+    for (mut transform, mut dash, material_handle) in query.iter_mut() {
         dash.cooldown_timer.tick(time.delta());
 
         if dash.is_dashing {
@@ -76,6 +84,14 @@ fn move_player(
                 dash.cooldown_timer.reset();
             } else {
                 transform.translation += dash.direction * DASH_SPEED * time.delta_secs();
+                commands.spawn((
+                    TrailEffect {
+                        timer: Timer::from_seconds(TRAIL_LIFESPAN, TimerMode::Once),
+                    },
+                    Mesh2d(meshes.add(Circle { radius: PLAYER_RADIUS * 0.8 })),
+                    MeshMaterial2d(materials.add(Color::from(bevy::color::palettes::css::SKY_BLUE))),
+                    Transform::from_translation(transform.translation),
+                ));
             }
         } else {
             let mut direction = Vec3::ZERO;
@@ -98,6 +114,16 @@ fn move_player(
                 }
             }
         }
+
+        if let Some(material) = materials.get_mut(material_handle) {
+            if dash.is_dashing {
+                material.color = Color::from(bevy::color::palettes::css::SKY_BLUE);
+            } else if dash.cooldown_timer.elapsed() < dash.cooldown_timer.duration() {
+                material.color = Color::from(bevy::color::palettes::css::RED);
+            } else {
+                material.color = Color::from(bevy::color::palettes::css::WHITE);
+            }
+        }
    
         transform.translation.y = transform.translation.y.clamp(bottom_boundary, top_boundary);
 
@@ -105,6 +131,23 @@ fn move_player(
             transform.translation.x = -wrap_threshold;
         } else if transform.translation.x < -wrap_threshold {
             transform.translation.x = wrap_threshold;
+        }
+    }
+}
+
+fn fade_trails(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Transform, &mut TrailEffect)>,
+    time: Res<Time>,
+) {
+    for (entity, mut transform, mut trail) in query.iter_mut() {
+        trail. timer.tick(time.delta());
+
+        if trail.timer.just_finished() {
+            commands.entity(entity).despawn();
+        } else {
+            let progress = trail.timer.fraction_remaining();
+            transform.scale = Vec3::splat(progress);
         }
     }
 }
