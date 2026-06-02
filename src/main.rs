@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+// rand is used via `rand::random()` below
 
 const MOVE_SPEED: f32 = 300.0;
 const DASH_SPEED: f32 = 1500.0;
@@ -6,6 +7,9 @@ const DASH_DURATION: f32 = 0.15;
 const DASH_COOLDOWN: f32 = 1.0;
 const PLAYER_RADIUS: f32 = 10.0;
 const TRAIL_LIFESPAN: f32 = 0.25;
+
+const SPAWN_INTERVAL: f32 = 2.0;
+const COLLECTIBLE_SIZE: f32 = 20.0;
 
 #[derive(Component)] 
 struct Player;
@@ -24,11 +28,18 @@ struct TrailEffect {
     timer: Timer,
 }
 
+#[derive(Component)]
+struct Collectible;
+
+#[derive(Resource)]
+struct SpawnTimer(Timer);
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .insert_resource(SpawnTimer(Timer::from_seconds(SPAWN_INTERVAL, TimerMode::Repeating)))
         .add_systems(Startup, setup)
-        .add_systems(Update, (move_player, fade_trails))
+        .add_systems(Update, (move_player, fade_trails, spawn_collectibles, collect_items))
         .run();
 }
 
@@ -152,6 +163,54 @@ fn fade_trails(
         } else {
             let progress = trail.timer.fraction_remaining();
             transform.scale = Vec3::splat(progress);
+        }
+    }
+}
+
+fn spawn_collectibles(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut spawn_timer: ResMut<SpawnTimer>,
+    time: Res<Time>,
+    windows: Query<&Window>,
+) {
+    spawn_timer.0.tick(time.delta());
+
+    if spawn_timer.0.just_finished() {
+        let window = match windows.single() {
+            Ok(window) => window,
+            Err(_) => return,
+        };
+        let half_width = window.width() / 2.0 - COLLECTIBLE_SIZE;
+        let half_height = window.height() / 2.0 - COLLECTIBLE_SIZE;
+
+        let x = rand::random::<f32>() * (half_width * 2.0) - half_width;
+        let y = rand::random::<f32>() * (half_height * 2.0) - half_height;
+
+        commands.spawn((
+            Collectible,
+            Mesh2d(meshes.add(Circle { radius: COLLECTIBLE_SIZE / 2.0 })),
+            MeshMaterial2d(materials.add(Color::from(bevy::color::palettes::css::GOLD))),
+            Transform::from_translation(Vec3::new(x, y, 0.0)),
+        ));
+    }
+}
+
+fn collect_items(
+    mut commands: Commands,
+    player_query: Query<&Transform, With<Player>>,
+    collectible_query: Query<(Entity, &Transform), With<Collectible>>,
+) {
+    let player_transform = match player_query.single() {
+        Ok(transform) => transform,
+        Err(_) => return,
+    };
+
+    for (entity, collectible_transform) in collectible_query.iter() {
+        let distance = player_transform.translation.distance(collectible_transform.translation);
+        if distance < PLAYER_RADIUS + COLLECTIBLE_SIZE / 2.0 {
+            commands.entity(entity).despawn();
         }
     }
 }
