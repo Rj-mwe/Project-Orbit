@@ -10,6 +10,7 @@ const TRAIL_LIFESPAN: f32 = 0.25;
 
 const SPAWN_INTERVAL: f32 = 2.0;
 const COLLECTIBLE_SIZE: f32 = 20.0;
+const MAX_COLLECTIBLES: usize = 8;
 
 #[derive(Component)] 
 struct Player;
@@ -174,26 +175,52 @@ fn spawn_collectibles(
     mut spawn_timer: ResMut<SpawnTimer>,
     time: Res<Time>,
     windows: Query<&Window>,
+    collectible_query: Query<&Transform, With<Collectible>>,
 ) {
     spawn_timer.0.tick(time.delta());
 
     if spawn_timer.0.just_finished() {
+        if collectible_query.iter().count() >= MAX_COLLECTIBLES {
+            return;
+        }
+
         let window = match windows.single() {
             Ok(window) => window,
             Err(_) => return,
         };
+
+        let existing_positions: Vec<Vec2> = collectible_query
+            .iter()
+            .map(|transform| transform.translation.truncate())
+            .collect();
+
         let half_width = window.width() / 2.0 - COLLECTIBLE_SIZE;
         let half_height = window.height() / 2.0 - COLLECTIBLE_SIZE;
+        let mut spawn_position = None;
 
-        let x = rand::random::<f32>() * (half_width * 2.0) - half_width;
-        let y = rand::random::<f32>() * (half_height * 2.0) - half_height;
+        for _ in 0..20 {
+            let x = rand::random::<f32>() * (half_width * 2.0) - half_width;
+            let y = rand::random::<f32>() * (half_height * 2.0) - half_height;
+            let candidate = Vec2::new(x, y);
 
-        commands.spawn((
-            Collectible,
-            Mesh2d(meshes.add(Circle { radius: COLLECTIBLE_SIZE / 2.0 })),
-            MeshMaterial2d(materials.add(Color::from(bevy::color::palettes::css::GOLD))),
-            Transform::from_translation(Vec3::new(x, y, 0.0)),
-        ));
+            let overlaps = existing_positions.iter().any(|&pos| {
+                pos.distance(candidate) < COLLECTIBLE_SIZE
+            });
+
+            if !overlaps {
+                spawn_position = Some(candidate);
+                break;
+            }
+        }
+
+        if let Some(position) = spawn_position {
+            commands.spawn((
+                Collectible,
+                Mesh2d(meshes.add(Circle { radius: COLLECTIBLE_SIZE / 2.0 })),
+                MeshMaterial2d(materials.add(Color::from(bevy::color::palettes::css::GOLD))),
+                Transform::from_translation(Vec3::new(position.x, position.y, 0.0)),
+            ));
+        }
     }
 }
 
