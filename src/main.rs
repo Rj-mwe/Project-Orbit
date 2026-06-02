@@ -3,6 +3,7 @@ use bevy::prelude::*;
 const MOVE_SPEED: f32 = 300.0;
 const DASH_SPEED: f32 = 1500.0;
 const DASH_DURATION: f32 = 0.15;
+const DASH_COOLDOWN: f32 = 1.0;
 const PLAYER_RADIUS: f32 = 50.0;
 
 #[derive(Component)] 
@@ -10,7 +11,8 @@ struct Player;
 
 #[derive(Component)]
 struct Dash {
-    timer: Timer,
+    duration_timer: Timer,
+    cooldown_timer: Timer,
     direction: Vec3,
     is_dashing: bool,
 }
@@ -32,7 +34,12 @@ fn setup(
     commands.spawn((
         Player,
         Dash {
-            timer: Timer::from_seconds(DASH_DURATION, TimerMode::Once),
+            duration_timer: Timer::from_seconds(DASH_DURATION, TimerMode::Once),
+            cooldown_timer: {
+                let mut timer = Timer::from_seconds(DASH_COOLDOWN, TimerMode::Once);
+                timer.tick(std::time::Duration::from_secs_f32(DASH_COOLDOWN));
+                timer
+            },
             direction: Vec3::ZERO,
             is_dashing: false,
         },
@@ -59,10 +66,13 @@ fn move_player(
     let wrap_threshold = half_width + PLAYER_RADIUS;
 
     for (mut transform, mut dash) in query.iter_mut() {
+        dash.cooldown_timer.tick(time.delta());
+
         if dash.is_dashing {
-            dash.timer.tick(time.delta());
-            if dash.timer.just_finished() {
+            dash.duration_timer.tick(time.delta());
+            if dash.duration_timer.just_finished() {
                 dash.is_dashing = false;
+                dash.cooldown_timer.reset();
             } else {
                 transform.translation += dash.direction * DASH_SPEED * time.delta_secs();
             }
@@ -78,10 +88,12 @@ fn move_player(
                 let normalized_dir = direction.normalize();
                 transform.translation += MOVE_SPEED * normalized_dir * time.delta_secs();
 
-                if keys.just_pressed(KeyCode::Space) {
+                if keys.just_pressed(KeyCode::Space)
+                    && dash.cooldown_timer.elapsed() >= dash.cooldown_timer.duration()
+                {
                     dash.is_dashing = true;
                     dash.direction = normalized_dir;
-                    dash.timer.reset();
+                    dash.duration_timer.reset();
                 }
             }
         }
